@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firmware Flash - LED Tool</title>
+<link rel="stylesheet" href="css/style.css" />
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+  <main>
+    <h1>ファームウェア書き込み</h1>
+    <p class="note">
+      対応ブラウザ: Chrome / Edge（Web Serial必須）。<br />
+      ESP32-C3をUSBケーブルでPCに接続してからボタンを押してください。
+    </p>
+    <esp-web-install-button manifest="firmware/manifest.json"></esp-web-install-button>
+    <p><a href="index.html">← 戻る</a></p>
+  </main>
+</body>
+</html>

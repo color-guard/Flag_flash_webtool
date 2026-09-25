@@ -1,0 +1,13 @@
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# Node (将来 React/Next.js に移行した際用)
+node_modules/
+.next/
+dist/
+out/
+
+# OS
+.DS_Store
+Thumbs.db

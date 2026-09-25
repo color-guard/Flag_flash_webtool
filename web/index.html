@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LED Tool</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main>
+    <h1>LED Tool <span class="step">Step1: 疎通確認（動画ソース版）</span></h1>
+    <p class="note">
+      対応ブラウザ: Chrome / Edge（Web Bluetooth必須）。HTTPSかlocalhostで開くこと。
+    </p>
+
+    <div class="controls">
+      <button id="connectBtn">BLE接続</button>
+      <label class="file-input">
+        動画を選択
+        <input type="file" id="videoInput" accept="video/*" />
+      </label>
+    </div>
+
+    <video id="videoPreview" muted loop playsinline></video>
+
+    <div class="controls">
+      <button id="startBtn" disabled>送信開始</button>
+      <button id="stopBtn" disabled>停止</button>
+    </div>
+
+    <dl class="status">
+      <dt>状態</dt><dd id="status">未接続</dd>
+      <dt>LED数</dt><dd id="ledCount">-</dd>
+      <dt>FPS</dt><dd id="fps">-</dd>
+    </dl>
+
+    <p><a href="flash.html">→ ファームウェア書き込みページ</a></p>
+  </main>
+
+  <script type="module" src="ui/main.js"></script>
+</body>
+</html>
