@@ -1,122 +1,152 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Stage from './components/Stage.jsx';
+import Controls from './components/Controls.jsx';
+import BleControl from './components/BleControl.jsx';
+import { connect, isConnected, sendFrame } from './core/ble.js';
+import { loadLayout, saveLayout } from './core/storage.js';
+import { resampleAlongPolyline, simplifyPoints } from './core/geometry.js';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const videoRef = useRef(null);
+  const initial = loadLayout();
+
+  const [ledCount, setLedCount] = useState(initial.ledCount);
+  const [strokePoints, setStrokePoints] = useState(initial.strokePoints);
+  const [ledPositions, setLedPositions] = useState(initial.ledPositions);
+  const [mode, setMode] = useState('normal'); // 'normal' | 'placementReset'
+  const [displayMode, setDisplayMode] = useState('video'); // 'video' | 'led'
+  const [videoFile, setVideoFile] = useState(null);
+
+  // BLE関連
+  const [bleConnected, setBleConnected] = useState(false);
+  const [bleConnecting, setBleConnecting] = useState(false);
+  const [bleDeviceName, setBleDeviceName] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [fps, setFps] = useState(0);
+  const frameCountRef = useRef(0);
+  const lastFpsTimeRef = useRef(performance.now());
+
+  // 配置データが変わるたびに永続化
+  useEffect(() => {
+    saveLayout({ ledCount, strokePoints, ledPositions });
+  }, [ledCount, strokePoints, ledPositions]);
+
+  // LED数変更: 一筆書き線が既にあれば、その線をそのまま新しい数で再分割する
+  const handleLedCountChange = useCallback(
+    (newCount) => {
+      setLedCount(newCount);
+      if (strokePoints.length >= 2) {
+        setLedPositions(resampleAlongPolyline(strokePoints, newCount));
+      }
+    },
+    [strokePoints]
+  );
+
+  // 配置リセットボタン: 既存の線・位置をクリアして一筆書きモードへ
+  const handleResetClick = useCallback(() => {
+    setStrokePoints([]);
+    setLedPositions([]);
+    setMode('placementReset');
+  }, []);
+
+  // 一筆書き完了: 簡略化した点列を保存し、現在のLED数で等間隔分割してLED位置を確定
+  const handleStrokeComplete = useCallback(
+    (rawPoints) => {
+      const simplified = simplifyPoints(rawPoints);
+      const positions = resampleAlongPolyline(simplified, ledCount);
+      setStrokePoints(simplified);
+      setLedPositions(positions);
+      setMode('normal');
+    },
+    [ledCount]
+  );
+
+  // 通常モードでのマーカードラッグ
+  const handleMarkerDrag = useCallback((index, pos) => {
+    setLedPositions((prev) => {
+      const next = [...prev];
+      next[index] = pos;
+      return next;
+    });
+  }, []);
+
+  // BLE接続。デバイス側の実際のLED数が分かれば、UI側のLED数をそれに合わせて同期する
+  // （ファームウェアのバッファサイズとずれると表示が崩れるため）。
+  const handleConnectClick = useCallback(async () => {
+    setBleConnecting(true);
+    try {
+      const info = await connect();
+      setBleConnected(true);
+      setBleDeviceName(info.name ?? 'unknown');
+      if (info.ledCount && info.ledCount !== ledCount) {
+        handleLedCountChange(info.ledCount);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('BLE接続に失敗しました: ' + e.message);
+    } finally {
+      setBleConnecting(false);
+    }
+  }, [ledCount, handleLedCountChange]);
+
+  // Stageが毎フレーム計算しているRGBデータを受け取り、送信ONなら流す。
+  // マーカー色更新・グロー描画と同じサンプリング結果を使い回しているので二重計算にはならない。
+  const handleFrame = useCallback(
+    async (rgb) => {
+      if (!sending || !isConnected()) return;
+      const sent = await sendFrame(rgb);
+      if (sent) {
+        frameCountRef.current++;
+        const now = performance.now();
+        const elapsed = now - lastFpsTimeRef.current;
+        if (elapsed >= 1000) {
+          setFps((frameCountRef.current / elapsed) * 1000);
+          frameCountRef.current = 0;
+          lastFpsTimeRef.current = now;
+        }
+      }
+    },
+    [sending]
+  );
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <h1>LED配置エディタ</h1>
 
-      <div className="ticks"></div>
+      <BleControl
+        connected={bleConnected}
+        connecting={bleConnecting}
+        deviceName={bleDeviceName}
+        onConnectClick={handleConnectClick}
+        sending={sending}
+        onToggleSending={() => setSending((s) => !s)}
+        fps={fps}
+      />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <Controls
+        videoRef={videoRef}
+        videoFile={videoFile}
+        onVideoFileChange={setVideoFile}
+        ledCount={ledCount}
+        onLedCountChange={handleLedCountChange}
+        mode={mode}
+        onResetClick={handleResetClick}
+        displayMode={displayMode}
+        onDisplayModeChange={setDisplayMode}
+      />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <Stage
+        videoRef={videoRef}
+        videoFile={videoFile}
+        mode={mode}
+        displayMode={displayMode}
+        strokePoints={strokePoints}
+        ledPositions={ledPositions}
+        onStrokeComplete={handleStrokeComplete}
+        onMarkerDrag={handleMarkerDrag}
+        onFrame={handleFrame}
+      />
+    </div>
+  );
 }
-
-export default App
