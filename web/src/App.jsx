@@ -113,6 +113,11 @@ export default function App() {
   return (
     <div className="app">
       <h1>LED配置エディタ</h1>
+      <p>
+        <a href={`${import.meta.env.BASE_URL}flash.html`} target="_blank" rel="noopener noreferrer">
+          ファームウェア書き込みページへ
+        </a>
+      </p>
 
       <BleControl
         connected={bleConnected}
