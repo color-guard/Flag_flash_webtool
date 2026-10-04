@@ -65,12 +65,20 @@ export async function sendFrame(rgbBytes) {
   }
 
   sending = true;
+  const t0 = performance.now();
   try {
     for (let offset = 0; offset < rgbBytes.length; offset += CHUNK_SIZE) {
       const chunk = rgbBytes.slice(offset, offset + CHUNK_SIZE);
       await pixelDataChar.writeValueWithoutResponse(chunk);
     }
+    const t1 = performance.now();
     await frameSyncChar.writeValue(new Uint8Array([1]));
+    const t2 = performance.now();
+
+    // 診断用ログ。どこで時間が溶けているか分かったら消してOK。
+    console.log(
+      `[ble] chunks: ${(t1 - t0).toFixed(1)}ms, frameSync: ${(t2 - t1).toFixed(1)}ms, total: ${(t2 - t0).toFixed(1)}ms`
+    );
     return true;
   } finally {
     sending = false;
