@@ -10,7 +10,7 @@
 
 // ---- 配線に合わせて変更 ----
 #define LED_PIN   19
-#define LED_COUNT 50
+#define LED_COUNT 30
 
 // web/core/ble.js のUUIDと必ず一致させること
 #define SERVICE_UUID      "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -36,7 +36,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
     bufferOffset = 0;
   }
   void onDisconnect(NimBLEServer* server, NimBLEConnInfo& connInfo, int reason) override {
-    Serial.println("[BLE] disconnected, restart advertising");
+    Serial.printf("[BLE] disconnected, reason=0x%02X, restart advertising\n", reason);
     NimBLEDevice::startAdvertising();
   }
 };
@@ -89,7 +89,7 @@ void setup() {
 
   pFrameSyncChar = pService->createCharacteristic(
       FRAME_SYNC_UUID,
-      NIMBLE_PROPERTY::WRITE);
+      NIMBLE_PROPERTY::WRITE_NR);
   pFrameSyncChar->setCallbacks(new FrameSyncCallbacks());
 
   pLedCountChar = pService->createCharacteristic(
