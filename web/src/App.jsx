@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Stage from './components/Stage.jsx';
 import Controls from './components/Controls.jsx';
 import BleControl from './components/BleControl.jsx';
+import LayoutIO from './components/LayoutIO.jsx';
 import { connect, isConnected, sendFrame } from './core/ble.js';
 import { loadLayout, saveLayout } from './core/storage.js';
 import { resampleAlongPolyline, simplifyPoints } from './core/geometry.js';
@@ -61,6 +62,13 @@ export default function App() {
     },
     [ledCount]
   );
+
+  // JSONファイルからの配置読み込み。既存のpersistence用useEffectがそのまま保存も担う。
+  const handleImportLayout = useCallback((layout) => {
+    setLedCount(layout.ledCount);
+    setStrokePoints(layout.strokePoints);
+    setLedPositions(layout.ledPositions);
+  }, []);
 
   // 通常モードでのマーカードラッグ
   const handleMarkerDrag = useCallback((index, pos) => {
@@ -139,6 +147,13 @@ export default function App() {
         onResetClick={handleResetClick}
         displayMode={displayMode}
         onDisplayModeChange={setDisplayMode}
+      />
+
+      <LayoutIO
+        ledCount={ledCount}
+        strokePoints={strokePoints}
+        ledPositions={ledPositions}
+        onImport={handleImportLayout}
       />
 
       <Stage

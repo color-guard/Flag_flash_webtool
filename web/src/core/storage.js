@@ -29,3 +29,51 @@ export function saveLayout(layout) {
     console.warn('[storage] failed to save layout', e);
   }
 }
+
+// ---- JSONファイルとしての書き出し/読み込み ----
+// localStorageはオリジン(ドメイン)ごとに独立しているため、GitHub Pages版(BLE)と
+// ESP32版(WiFi, http://192.168.4.1)の間では配置データが共有されない。
+// JSONファイル経由で持ち運べるようにしておくことで、この間の受け渡しや、
+// 単純なバックアップ・他デバイスへの移行にも使える。
+
+const LAYOUT_FORMAT_VERSION = 1;
+
+/** 現在のレイアウトをJSONファイルとしてダウンロードさせる。 */
+export function exportLayoutToFile(layout, filename = 'led-layout.json') {
+  const payload = {
+    version: LAYOUT_FORMAT_VERSION,
+    ledCount: layout.ledCount,
+    strokePoints: layout.strokePoints,
+    ledPositions: layout.ledPositions,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** JSON文字列をパースし、最低限の形式チェックをしてレイアウトを返す。 */
+export function parseLayoutFromJson(jsonText) {
+  const data = JSON.parse(jsonText);
+  if (
+    typeof data.ledCount !== 'number' ||
+    !Array.isArray(data.strokePoints) ||
+    !Array.isArray(data.ledPositions)
+  ) {
+    throw new Error('レイアウトファイルの形式が不正です');
+  }
+  return {
+    ledCount: data.ledCount,
+    strokePoints: data.strokePoints,
+    ledPositions: data.ledPositions,
+  };
+}
+
+/** <input type="file">で選ばれたFileオブジェクトからレイアウトを読み込む。 */
+export async function importLayoutFromFile(file) {
+  const text = await file.text();
+  return parseLayoutFromJson(text);
+}

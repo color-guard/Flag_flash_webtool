@@ -1,8 +1,13 @@
-// LED Tool - Firmware (Step1: 最小疎通確認用)
+// LED Tool - Firmware (frameSync撤廃版)
 //
 // 役割はシンプルに:
-//   BLEでRGBデータのチャンクを受信 -> バッファに詰める -> frameSyncが来たらshow()
+//   BLEでRGBデータのチャンクを受信 -> バッファに詰める
+//   -> LED数ぶん(LED_COUNT*3バイト)たまったら自動的にshow()
+// 明示的な同期信号(frameSync)は使わず、受信バイト数だけでフレーム完了を判定する。
 // 光り方のロジックは一切持たない（Web側で計算したRGB列をそのまま流し込むだけ）。
+//
+// 注意: Web側が送るバイト数が LED_COUNT*3 ぴったりでないと表示が更新されない。
+// UIのLED数とこのLED_COUNTが必ず一致している前提の設計。
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
@@ -10,18 +15,16 @@
 
 // ---- 配線に合わせて変更 ----
 #define LED_PIN   19
-#define LED_COUNT 30
+#define LED_COUNT 50
 
-// web/core/ble.js のUUIDと必ず一致させること
+// web/core/ble.js のUUIDと必ず一致させること（frameSyncは撤廃したので使わない）
 #define SERVICE_UUID      "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define PIXEL_DATA_UUID   "6e400002-b5a3-f393-e0a9-e50e24dcca9e" // Write Without Response
-#define FRAME_SYNC_UUID   "6e400003-b5a3-f393-e0a9-e50e24dcca9e" // Write
 #define LED_COUNT_UUID    "6e400004-b5a3-f393-e0a9-e50e24dcca9e" // Read
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 NimBLECharacteristic* pPixelDataChar = nullptr;
-NimBLECharacteristic* pFrameSyncChar = nullptr;
 NimBLECharacteristic* pLedCountChar  = nullptr;
 
 uint8_t frameBuffer[LED_COUNT * 3];
@@ -55,13 +58,11 @@ class PixelDataCallbacks : public NimBLECharacteristicCallbacks {
     }
     memcpy(frameBuffer + bufferOffset, v.data(), len);
     bufferOffset += len;
-  }
-};
 
-// frameSyncへの書き込み = 1フレーム分たまったので表示せよ、の合図
-class FrameSyncCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
-    frameReady = true;
+    // 明示的な同期信号を使わず、LED_COUNT*3バイトぴったり受信できたら自動的に表示トリガー。
+    if (bufferOffset >= sizeof(frameBuffer)) {
+      frameReady = true;
+    }
   }
 };
 
@@ -86,11 +87,6 @@ void setup() {
       PIXEL_DATA_UUID,
       NIMBLE_PROPERTY::WRITE_NR);
   pPixelDataChar->setCallbacks(new PixelDataCallbacks());
-
-  pFrameSyncChar = pService->createCharacteristic(
-      FRAME_SYNC_UUID,
-      NIMBLE_PROPERTY::WRITE_NR);
-  pFrameSyncChar->setCallbacks(new FrameSyncCallbacks());
 
   pLedCountChar = pService->createCharacteristic(
       LED_COUNT_UUID,

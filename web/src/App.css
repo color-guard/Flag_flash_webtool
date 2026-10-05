@@ -90,6 +90,15 @@ input:disabled {
   cursor: not-allowed;
 }
 
+/* ---- layout import/export ---- */
+
+.layout-io {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 /* ---- stage ---- */
 
 .stage {

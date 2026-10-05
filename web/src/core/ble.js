@@ -1,11 +1,12 @@
-// core/ble.js
+// core/ble.js (frameSync撤廃版)
 // フレームワーク非依存のBLE通信レイヤー。
 // UI側（今はui/、将来はReactコンポーネント）はここの関数だけを呼び出す想定。
-// firmware/src/main.cpp のUUIDと必ず一致させること。
+// firmware/src/main_nosync.cpp のUUIDと必ず一致させること。
+// frameSyncは撤廃済み: ESP32側がLED_COUNT*3バイト受信した時点で自動的に表示する設計なので、
+// JS側はpixelDataのチャンクを送るだけでよい。
 
 const SERVICE_UUID    = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const PIXEL_DATA_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
-const FRAME_SYNC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
 const LED_COUNT_UUID  = '6e400004-b5a3-f393-e0a9-e50e24dcca9e';
 
 // 1回のwriteValueWithoutResponseで送るバイト数。
@@ -14,7 +15,6 @@ const CHUNK_SIZE = 180;
 
 let device = null;
 let pixelDataChar = null;
-let frameSyncChar = null;
 let sending = false; // 送信中に次フレームを重ねて送らないためのフラグ（バックプレッシャー制御）
 
 export async function connect() {
@@ -26,7 +26,6 @@ export async function connect() {
   const service = await server.getPrimaryService(SERVICE_UUID);
 
   pixelDataChar = await service.getCharacteristic(PIXEL_DATA_UUID);
-  frameSyncChar = await service.getCharacteristic(FRAME_SYNC_UUID);
 
   let ledCount = null;
   try {
@@ -56,7 +55,7 @@ export function disconnect() {
  * @returns {Promise<boolean>} 送信できたらtrue、送信中スキップならfalse
  */
 export async function sendFrame(rgbBytes) {
-  if (!pixelDataChar || !frameSyncChar) {
+  if (!pixelDataChar) {
     throw new Error('Not connected');
   }
   if (sending) {
@@ -74,13 +73,10 @@ export async function sendFrame(rgbBytes) {
       chunkCount++;
     }
     const t1 = performance.now();
-    await frameSyncChar.writeValueWithoutResponse(new Uint8Array([1]));
-    const t2 = performance.now();
 
-    // 診断用ログ。どこで時間が溶けているか分かったら消してOK。
+    // 診断用ログ。不要になったら消してOK。
     console.log(
-      `[ble] bytes: ${rgbBytes.length} (CHUNK_SIZE=${CHUNK_SIZE}), chunkCount: ${chunkCount}, ` +
-      `chunks: ${(t1 - t0).toFixed(1)}ms, frameSync: ${(t2 - t1).toFixed(1)}ms, total: ${(t2 - t0).toFixed(1)}ms`
+      `[ble] bytes: ${rgbBytes.length} (CHUNK_SIZE=${CHUNK_SIZE}), chunkCount: ${chunkCount}, total: ${(t1 - t0).toFixed(1)}ms`
     );
     return true;
   } finally {
