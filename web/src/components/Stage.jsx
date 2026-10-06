@@ -172,7 +172,6 @@ export default function Stage({
     >
       <video
         ref={videoRef}
-        muted
         loop
         playsInline
         className="stage__video"
