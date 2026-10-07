@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadVideo, sampleFrame } from '../core/videoSource.js';
 import { pointsToSvgPath } from '../core/geometry.js';
 
+// BLEへの送信は、動画の実フレームレートがどれだけ高くても、
+// 実証済みで安全なペース(ここでは30fps相当)を超えないように間引く。
+// 動画のメタデータ上のfpsと実際のフレーム配信レートが一致しない場合があり(VFR等)、
+// 高頻度になりすぎるとWrite Without Responseの取りこぼし→表示の乱れにつながるため。
+const MIN_SEND_INTERVAL_MS = 1000 / 30;
+
 /**
  * 動画 / LEDグロー表示の背景レイヤーと、LED位置マーカー・一筆書き線のSVGオーバーレイをまとめたコンポーネント。
  * mode === 'placementReset' の間はポインタ操作が「一筆書きの記録」になり、
@@ -26,6 +32,7 @@ export default function Stage({
   const circleRefs = useRef([]); // 各LEDマーカー<circle>への参照。色の直接書き込みに使う
   const drawingRef = useRef(null); // 描画中の点列。再レンダリング不要なのでrefで保持
   const dragIndexRef = useRef(null);
+  const lastFrameSentRef = useRef(0); // BLE送信の間引き用タイムスタンプ
 
   const [videoReady, setVideoReady] = useState(false);
   const [drawingPreview, setDrawingPreview] = useState([]); // 描画中プレビュー表示用
@@ -56,6 +63,10 @@ export default function Stage({
 
   // LED位置ごとの色を継続的にサンプリングし、マーカーの塗り色とグローcanvasへ直接書き込む。
   // Reactのstate/再レンダリングを経由しないことで、ここの処理が描画の遅延要因にならないようにしている。
+  //
+  // サンプリング自体(マーカー色のプレビュー更新)は動画の実レートのまま毎フレーム行うが、
+  // BLEへの送信(onFrame)だけはMIN_SEND_INTERVAL_MSで間引く。これにより、
+  // 画面上のプレビューはなめらかなまま、実機への送信ペースだけを安全な範囲に抑えられる。
   useEffect(() => {
     if (!videoReady) return;
     let raf;
@@ -95,8 +106,12 @@ export default function Stage({
         }
 
         // BLE送信など、このフレームのRGBデータを使いたい呼び出し元への通知。
-        // マーカー色更新・グロー描画と同じサンプリング結果を使い回すことで二重計算を避けている。
-        onFrame?.(rgb);
+        // 動画の実フレームレートが高くても、ここで安全なペースに間引く。
+        const now = performance.now();
+        if (now - lastFrameSentRef.current >= MIN_SEND_INTERVAL_MS) {
+          lastFrameSentRef.current = now;
+          onFrame?.(rgb);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -172,6 +187,7 @@ export default function Stage({
     >
       <video
         ref={videoRef}
+        //muted
         loop
         playsInline
         className="stage__video"
@@ -188,7 +204,7 @@ export default function Stage({
           <path
             d={pointsToSvgPath(strokePoints)}
             fill="none"
-            stroke="gray"
+            stroke="gray"//"white"
             strokeWidth="2"
             vectorEffect="non-scaling-stroke"
           />
